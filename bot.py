@@ -196,7 +196,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_player(user_id, username, referrer_id)
 
     keyboard = [
-        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url="http://localhost:5000"))]
+        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url="http://tn.com"))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Добро пожаловать! Нажмите кнопку, чтобы открыть игру:", reply_markup=reply_markup)
