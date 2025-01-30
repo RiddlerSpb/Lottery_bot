@@ -196,7 +196,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_player(user_id, username, referrer_id)
 
     keyboard = [
-        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url="http://riddlerspb.github.io/Lottery_bot/"))]
+        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url="https://riddlerspb.github.io/Lottery_bot/"))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Добро пожаловать! Нажмите кнопку, чтобы открыть игру:", reply_markup=reply_markup)
