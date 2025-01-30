@@ -4,16 +4,20 @@ import random
 import threading
 import time
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
-# Инициализация Flask для Web App
+# Инициализация Flask
 app = Flask(__name__)
+CORS(app)  # Разрешить запросы с любого домена
 
 # Инициализация базы данных
 def init_db():
     conn = sqlite3.connect('crypto_game.db')
     cursor = conn.cursor()
+    
+    # Таблица игроков
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS players (
             user_id INTEGER PRIMARY KEY,
@@ -24,9 +28,31 @@ def init_db():
             referral_code TEXT
         )
     ''')
+    
+    # Таблица истории цен TND
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tnd_price_history (
+            timestamp INTEGER PRIMARY KEY,
+            price REAL
+        )
+    ''')
+    
+    # Таблица заявок
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            type TEXT,  -- buy или sell
+            price REAL,
+            amount REAL,
+            status TEXT  -- active или completed
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
+    
 # Регистрация нового игрока
 def register_player(user_id, username, referrer_id=None):
     conn = sqlite3.connect('crypto_game.db')
@@ -57,46 +83,32 @@ def update_player_data(user_id, balance, portfolio):
     conn.commit()
     conn.close()
 
-# Покупка TND
-@app.route('/buy_tnd')
-def buy_tnd():
-    user_id = request.args.get('user_id')
-    player_data = get_player_data(user_id)
-    if player_data:
-        balance = player_data['balance']
-        portfolio = player_data['portfolio']
-        tnd_price = 10  # Цена TND в Шикоинах
+# Динамическая цена TND
+def update_tnd_price():
+    while True:
+        conn = sqlite3.connect('crypto_game.db')
+        cursor = conn.cursor()
+        
+        # Получаем текущую цену
+        cursor.execute('SELECT price FROM tnd_price_history ORDER BY timestamp DESC LIMIT 1')
+        last_price = cursor.fetchone()
+        last_price = last_price[0] if last_price else 10.0  # Стартовая цена
+        
+        # Изменяем цену случайным образом (не более чем на 10%)
+        new_price = last_price * (1 + random.uniform(-0.1, 0.1))
+        
+        # Сохраняем новую цену
+        cursor.execute('INSERT INTO tnd_price_history (timestamp, price) VALUES (?, ?)', (int(time.time()), new_price))
+        conn.commit()
+        conn.close()
+        
+        # Ждем 10 минут
+        time.sleep(600)
 
-        if balance >= tnd_price:
-            balance -= tnd_price
-            portfolio["TND"] = portfolio.get("TND", 0) + 1
-            update_player_data(user_id, balance, portfolio)
-            return jsonify({"message": f"Вы купили 1 TND за {tnd_price} Шикоинов."})
-        else:
-            return jsonify({"message": "Недостаточно средств для покупки TND."})
-    return jsonify({"message": "Ошибка: игрок не найден."})
+# Запуск в отдельном потоке
+threading.Thread(target=update_tnd_price, daemon=True).start()
 
-# Продажа TND
-@app.route('/sell_tnd')
-def sell_tnd():
-    user_id = request.args.get('user_id')
-    player_data = get_player_data(user_id)
-    if player_data:
-        balance = player_data['balance']
-        portfolio = player_data['portfolio']
-        tnd_price = 10  # Цена TND в Шикоинах
-        tnd_amount = portfolio.get("TND", 0)
-
-        if tnd_amount >= 1:
-            balance += tnd_price
-            portfolio["TND"] = tnd_amount - 1
-            update_player_data(user_id, balance, portfolio)
-            return jsonify({"message": f"Вы продали 1 TND за {tnd_price} Шикоинов."})
-        else:
-            return jsonify({"message": "У вас нет TND для продажи."})
-    return jsonify({"message": "Ошибка: игрок не найден."})
-
-# Получение данных игрока для Web App
+# Маршруты Flask
 @app.route('/get_player_data')
 def get_player_data_web():
     user_id = request.args.get('user_id')
@@ -105,88 +117,23 @@ def get_player_data_web():
         return jsonify(player_data)
     return jsonify({"error": "Игрок не найден."})
 
-# Веб-интерфейс (Web App)
-@app.route('/')
-def web_app():
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>CryptoSnark Trader</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                text-align: center;
-                padding: 20px;
-            }
-            button {
-                padding: 10px 20px;
-                font-size: 16px;
-                margin: 10px;
-            }
-            .container {
-                max-width: 400px;
-                margin: 0 auto;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>CryptoSnark Trader</h1>
-            <p id="balance">💰 Баланс: Загрузка...</p>
-            <p id="tnd">🪙 TND: Загрузка...</p>
-            <button onclick="buyTND()">Купить TND</button>
-            <button onclick="sellTND()">Продать TND</button>
-            <h2>Реферальная система</h2>
-            <p id="referralLink">🔗 Реферальная ссылка: Загрузка...</p>
-            <p id="referrals">👥 Приглашенные: Загрузка...</p>
-        </div>
+@app.route('/get_tnd_price_history')
+def get_tnd_price_history():
+    conn = sqlite3.connect('crypto_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT timestamp, price FROM tnd_price_history ORDER BY timestamp DESC LIMIT 144')  # Последние 24 часа
+    data = cursor.fetchall()
+    conn.close()
+    return jsonify([{"timestamp": entry[0], "price": entry[1]} for entry in data])
 
-        <script>
-            // Инициализация Web App
-            Telegram.WebApp.ready();
-
-            // Загрузка данных игрока
-            async function loadPlayerData() {
-                const user = Telegram.WebApp.initDataUnsafe.user;
-                if (!user) {
-                    alert("Ошибка: пользователь не авторизован.");
-                    return;
-                }
-
-                const response = await fetch(`/get_player_data?user_id=${user.id}`);
-                const data = await response.json();
-
-                document.getElementById("balance").textContent = `💰 Баланс: ${data.balance} Шикоинов`;
-                document.getElementById("tnd").textContent = `🪙 TND: ${data.portfolio.TND || 0}`;
-                document.getElementById("referralLink").textContent = `🔗 Реферальная ссылка: https://t.me/ваш_бот?start=${data.referral_code}`;
-                document.getElementById("referrals").textContent = `👥 Приглашенные: ${data.referrals || 0}`;
-            }
-
-            // Покупка TND
-            async function buyTND() {
-                const user = Telegram.WebApp.initDataUnsafe.user;
-                const response = await fetch(`/buy_tnd?user_id=${user.id}`);
-                const result = await response.json();
-                alert(result.message);
-                loadPlayerData();  // Обновляем данные
-            }
-
-            // Продажа TND
-            async function sellTND() {
-                const user = Telegram.WebApp.initDataUnsafe.user;
-                const response = await fetch(`/sell_tnd?user_id=${user.id}`);
-                const result = await response.json();
-                alert(result.message);
-                loadPlayerData();  // Обновляем данные
-            }
-
-            // Загружаем данные при открытии
-            loadPlayerData();
-        </script>
-    </body>
-    </html>
-    '''
+@app.route('/get_order_book')
+def get_order_book():
+    conn = sqlite3.connect('crypto_game.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT type, price, amount FROM orders WHERE status = "active"')
+    data = cursor.fetchall()
+    conn.close()
+    return jsonify([{"type": entry[0], "price": entry[1], "amount": entry[2]} for entry in data])
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):

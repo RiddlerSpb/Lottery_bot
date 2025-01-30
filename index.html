@@ -2,76 +2,31 @@
 <html>
 <head>
     <title>CryptoSnark Trader</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            margin: 10px;
-        }
-        .container {
-            max-width: 400px;
-            margin: 0 auto;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="scripts.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>CryptoSnark Trader</h1>
         <p id="balance">💰 Баланс: Загрузка...</p>
         <p id="tnd">🪙 TND: Загрузка...</p>
+        <p id="price">💵 Цена TND: Загрузка...</p>
+        <canvas id="priceChart"></canvas>
+        <div id="orderBook">
+            <h2>Стакан заявок</h2>
+            <div id="buyOrders"></div>
+            <div id="sellOrders"></div>
+        </div>
         <button onclick="buyTND()">Купить TND</button>
         <button onclick="sellTND()">Продать TND</button>
-        <h2>Реферальная система</h2>
-        <p id="referralLink">🔗 Реферальная ссылка: Загрузка...</p>
-        <p id="referrals">👥 Приглашенные: Загрузка...</p>
     </div>
 
-    <script>
-        // Инициализация Web App
-        Telegram.WebApp.ready();
-
-        // Загрузка данных игрока
-        async function loadPlayerData() {
-            const user = Telegram.WebApp.initDataUnsafe.user;
-            if (!user) {
-                alert("Ошибка: пользователь не авторизован.");
-                return;
-            }
-
-            const response = await fetch(`/get_player_data?user_id=${user.id}`);
-            const data = await response.json();
-
-            document.getElementById("balance").textContent = `💰 Баланс: ${data.balance} Шикоинов`;
-            document.getElementById("tnd").textContent = `🪙 TND: ${data.portfolio.TND || 0}`;
-            document.getElementById("referralLink").textContent = `🔗 Реферальная ссылка: https://t.me/ваш_бот?start=${data.referral_code}`;
-            document.getElementById("referrals").textContent = `👥 Приглашенные: ${data.referrals || 0}`;
-        }
-
-        // Покупка TND
-        async function buyTND() {
-            const user = Telegram.WebApp.initDataUnsafe.user;
-            const response = await fetch(`/buy_tnd?user_id=${user.id}`);
-            const result = await response.json();
-            alert(result.message);
-            loadPlayerData();  // Обновляем данные
-        }
-
-        // Продажа TND
-        async function sellTND() {
-            const user = Telegram.WebApp.initDataUnsafe.user;
-            const response = await fetch(`/sell_tnd?user_id=${user.id}`);
-            const result = await response.json();
-            alert(result.message);
-            loadPlayerData();  // Обновляем данные
-        }
-
-        // Загружаем данные при открытии
-        loadPlayerData();
-    </script>
+    <!-- Нижнее меню -->
+    <div class="bottom-menu">
+        <button onclick="openMain()">Главная</button>
+        <button onclick="openReferral()">Рефералы</button>
+        <button onclick="openSettings()">Настройки</button>
+    </div>
 </body>
 </html>
