@@ -124,7 +124,7 @@ function openSettings() {
 }
 
 // Загружаем данные для реферальной страницы
-async function loadReferralData() {
+async function loadPlayerData() {
     const user = Telegram.WebApp.initDataUnsafe.user;
     if (!user) {
         alert("Ошибка: пользователь не авторизован.");
@@ -132,14 +132,19 @@ async function loadReferralData() {
     }
 
     try {
+        // Отображаем ник Telegram
+        document.getElementById("username").textContent = `👤 ${user.username || "Аноним"}`;
+
+        // Отправляем данные на сервер для авторизации
         const response = await fetch(`/get_player_data?user_id=${user.id}`);
         if (!response.ok) {
             throw new Error("Ошибка при загрузке данных");
         }
         const data = await response.json();
 
-        document.getElementById("referralLink").textContent = `🔗 Реферальная ссылка: https://t.me/ваш_бот?start=${data.referral_code}`;
-        document.getElementById("referrals").textContent = `👥 Приглашенные: ${data.referrals || 0}`;
+        // Обновляем баланс и портфель
+        document.getElementById("balance").textContent = `💰 Баланс: ${data.balance} TNDUSD`;
+        document.getElementById("tnd").textContent = `🪙 TND: ${data.portfolio.TND || 0}`;
     } catch (error) {
         console.error("Ошибка:", error);
         alert("Не удалось загрузить данные. Попробуйте позже.");

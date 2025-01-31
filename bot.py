@@ -8,6 +8,9 @@ from flask_cors import CORS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
+
+db_ready = threading.Event()
+
 # Инициализация Flask
 app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)  # Разрешить запросы с любого домена
@@ -16,6 +19,8 @@ CORS(app)  # Разрешить запросы с любого домена
 def init_db():
     conn = sqlite3.connect('crypto_game.db')
     cursor = conn.cursor()
+    
+    print("Создание таблиц...")
     
     # Таблица игроков
     cursor.execute('''
@@ -28,19 +33,23 @@ def init_db():
             referral_code TEXT
         )
     ''')
+    print("Таблица players создана или уже существует.")
     
     # Таблица истории цен TND
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tnd_price_history (
-            timestamp INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Автоинкрементное поле
+            timestamp INTEGER,
             price REAL
         )
     ''')
+    print("Таблица tnd_price_history создана или уже существует.")
     
     # Добавляем начальную цену токена (10 TNDUSD)
     cursor.execute('SELECT COUNT(*) FROM tnd_price_history')
     if cursor.fetchone()[0] == 0:  # Если таблица пустая
         cursor.execute('INSERT INTO tnd_price_history (timestamp, price) VALUES (?, ?)', (int(time.time()), 10.0))
+        print("Начальная цена токена добавлена.")
     
     # Таблица заявок
     cursor.execute('''
@@ -53,9 +62,13 @@ def init_db():
             status TEXT  -- active или completed
         )
     ''')
+    print("Таблица orders создана или уже существует.")
     
     conn.commit()
     conn.close()
+    print("База данных инициализирована.")
+    
+    db_ready.set()  # Сигнализируем, что база данных готова
 
 # Регистрация нового игрока
 def register_player(user_id, username, referrer_id=None):
@@ -89,6 +102,8 @@ def update_player_data(user_id, balance, portfolio):
 
 # Динамическая цена TND
 def update_tnd_price():
+    db_ready.wait()  # Ждем, пока база данных не будет готова
+    
     while True:
         conn = sqlite3.connect('crypto_game.db')
         cursor = conn.cursor()
@@ -102,7 +117,8 @@ def update_tnd_price():
         new_price = last_price * (1 + random.uniform(-0.1, 0.1))
         
         # Сохраняем новую цену
-        cursor.execute('INSERT INTO tnd_price_history (timestamp, price) VALUES (?, ?)', (int(time.time()), new_price))
+        current_timestamp = int(time.time())  # Уникальное значение времени
+        cursor.execute('INSERT INTO tnd_price_history (timestamp, price) VALUES (?, ?)', (current_timestamp, new_price))
         conn.commit()
         conn.close()
         
@@ -120,10 +136,13 @@ def index():
 @app.route('/get_player_data')
 def get_player_data_web():
     user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({"error": "user_id не указан"}), 400
+
     player_data = get_player_data(user_id)
     if player_data:
         return jsonify(player_data)
-    return jsonify({"error": "Игрок не найден."})
+    return jsonify({"error": "Игрок не найден."}), 404
 
 @app.route('/get_tnd_price_history')
 def get_tnd_price_history():
@@ -148,8 +167,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     username = update.message.from_user.username
     referrer_id = context.args[0] if context.args else None
+
+    # Регистрируем игрока
     register_player(user_id, username, referrer_id)
 
+    # Отправляем сообщение с кнопкой для открытия Web App
     web_app_url = "https://riddlerspb.github.io/Lottery_bot/"  # Измените версию при каждом обновлении
     keyboard = [
         [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url=web_app_url))]
@@ -159,7 +181,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Основная функция
 def main():
-    init_db()
+    init_db()  # Инициализация базы данных
+
+    # Запуск потока для обновления цены токена
+    threading.Thread(target=update_tnd_price, daemon=True).start()
+
     application = Application.builder().token("8050714665:AAHCof0RXKlSqcqtoqw1iVNKhch9POiFYsI").build()
     application.add_handler(CommandHandler("start", start))
     application.run_polling()
