@@ -1,5 +1,7 @@
 let priceChart;
 
+
+console.log("Данные от Telegram:", Telegram.WebApp.initDataUnsafe);
 // Загрузка данных игрока
 async function loadPlayerData() {
     const user = Telegram.WebApp.initDataUnsafe.user;
@@ -132,17 +134,19 @@ async function loadPlayerData() {
     }
 
     try {
-        // Отображаем ник Telegram
-        document.getElementById("username").textContent = `👤 ${user.username || "Аноним"}`;
-
-        // Отправляем данные на сервер для авторизации
+        console.log("Запрос данных игрока...");
         const response = await fetch(`/get_player_data?user_id=${user.id}`);
+        console.log("Ответ сервера:", response);
+        
         if (!response.ok) {
             throw new Error("Ошибка при загрузке данных");
         }
+        
         const data = await response.json();
+        console.log("Данные игрока:", data);
 
-        // Обновляем баланс и портфель
+        // Обновляем интерфейс
+        document.getElementById("username").textContent = `👤 ${user.username || "Аноним"}`;
         document.getElementById("balance").textContent = `💰 Баланс: ${data.balance} TNDUSD`;
         document.getElementById("tnd").textContent = `🪙 TND: ${data.portfolio.TND || 0}`;
     } catch (error) {
