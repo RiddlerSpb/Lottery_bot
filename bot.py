@@ -9,7 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppI
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 
 # Инициализация Flask
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates", static_folder="static")
 CORS(app)  # Разрешить запросы с любого домена
 
 # Инициализация базы данных
@@ -37,6 +37,11 @@ def init_db():
         )
     ''')
     
+    # Добавляем начальную цену токена (10 TNDUSD)
+    cursor.execute('SELECT COUNT(*) FROM tnd_price_history')
+    if cursor.fetchone()[0] == 0:  # Если таблица пустая
+        cursor.execute('INSERT INTO tnd_price_history (timestamp, price) VALUES (?, ?)', (int(time.time()), 10.0))
+    
     # Таблица заявок
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS orders (
@@ -52,7 +57,6 @@ def init_db():
     conn.commit()
     conn.close()
 
-    
 # Регистрация нового игрока
 def register_player(user_id, username, referrer_id=None):
     conn = sqlite3.connect('crypto_game.db')
@@ -109,6 +113,10 @@ def update_tnd_price():
 threading.Thread(target=update_tnd_price, daemon=True).start()
 
 # Маршруты Flask
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
+
 @app.route('/get_player_data')
 def get_player_data_web():
     user_id = request.args.get('user_id')
@@ -142,8 +150,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     referrer_id = context.args[0] if context.args else None
     register_player(user_id, username, referrer_id)
 
+    web_app_url = "https://riddlerspb.github.io/Lottery_bot/"  # Измените версию при каждом обновлении
     keyboard = [
-        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url="https://riddlerspb.github.io/Lottery_bot/"))]
+        [InlineKeyboardButton("Открыть игру", web_app=WebAppInfo(url=web_app_url))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Добро пожаловать! Нажмите кнопку, чтобы открыть игру:", reply_markup=reply_markup)

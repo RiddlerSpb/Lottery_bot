@@ -9,6 +9,10 @@ async function loadPlayerData() {
     }
 
     try {
+        // Отображаем ник Telegram
+        document.getElementById("username").textContent = `👤 ${user.username || "Аноним"}`;
+
+        // Загружаем остальные данные
         const response = await fetch(`/get_player_data?user_id=${user.id}`);
         if (!response.ok) {
             throw new Error("Ошибка при загрузке данных");
@@ -23,7 +27,7 @@ async function loadPlayerData() {
     }
 }
 
-// Загрузка графика цены
+// Загрузка графика цены TND
 async function loadPriceChart() {
     const response = await fetch('/get_tnd_price_history');
     const data = await response.json();
@@ -97,8 +101,54 @@ async function sellTND() {
     loadPlayerData();
 }
 
-// Загружаем данные при открытии
+// Функция для открытия главной страницы
+function openMain() {
+    document.getElementById("mainPage").style.display = "block";
+    document.getElementById("referralPage").style.display = "none";
+    document.getElementById("settingsPage").style.display = "none";
+}
+
+// Функция для открытия реферальной страницы
+function openReferral() {
+    document.getElementById("mainPage").style.display = "none";
+    document.getElementById("referralPage").style.display = "block";
+    document.getElementById("settingsPage").style.display = "none";
+    loadReferralData();  // Загружаем данные для реферальной страницы
+}
+
+// Функция для открытия страницы настроек
+function openSettings() {
+    document.getElementById("mainPage").style.display = "none";
+    document.getElementById("referralPage").style.display = "none";
+    document.getElementById("settingsPage").style.display = "block";
+}
+
+// Загружаем данные для реферальной страницы
+async function loadReferralData() {
+    const user = Telegram.WebApp.initDataUnsafe.user;
+    if (!user) {
+        alert("Ошибка: пользователь не авторизован.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/get_player_data?user_id=${user.id}`);
+        if (!response.ok) {
+            throw new Error("Ошибка при загрузке данных");
+        }
+        const data = await response.json();
+
+        document.getElementById("referralLink").textContent = `🔗 Реферальная ссылка: https://t.me/ваш_бот?start=${data.referral_code}`;
+        document.getElementById("referrals").textContent = `👥 Приглашенные: ${data.referrals || 0}`;
+    } catch (error) {
+        console.error("Ошибка:", error);
+        alert("Не удалось загрузить данные. Попробуйте позже.");
+    }
+}
+
+// Инициализация
 Telegram.WebApp.ready();
+openMain();  // По умолчанию открываем главную страницу
 loadPlayerData();
 loadPriceChart();
 loadOrderBook();
